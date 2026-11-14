@@ -1,0 +1,217 @@
+
+#!/bin/bash
+
+# Install Apache
+yum -y install httpd
+
+# Fetch IMDSv2 token
+TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" \
+  -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+
+# Retrieve instance metadata
+PRIVATE_IP=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" \
+  http://169.254.169.254/latest/meta-data/local-ipv4)
+
+PUBLIC_IP=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" \
+  http://169.254.169.254/latest/meta-data/public-ipv4)
+
+INSTANCE_ID=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" \
+  http://169.254.169.254/latest/meta-data/instance-id)
+
+INSTANCE_TYPE=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" \
+  http://169.254.169.254/latest/meta-data/instance-type)
+
+AZ=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" \
+  http://169.254.169.254/latest/meta-data/placement/availability-zone)
+
+# Create web directory
+mkdir -p /var/www/html
+
+# Create glassmorphism landing page
+cat <<HTML > /var/www/html/index.html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AWS EC2 | Live Instance Status</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+    }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at top left, #1e1b4b, #090d16 60%, #020617);
+      color: #f8fafc;
+      padding: 20px;
+    }
+
+    .card {
+      width: 100%;
+      max-width: 540px;
+      background: rgba(30, 41, 59, 0.55);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      border-radius: 20px;
+      padding: 36px;
+      box-shadow: 0 25px 50px -12px rgba(0,0,0,0.7),
+                  0 0 40px rgba(99,102,241,0.15);
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(16,185,129,0.15);
+      border: 1px solid rgba(16,185,129,0.4);
+      color: #34d399;
+      padding: 6px 14px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 18px;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      background: #10b981;
+      border-radius: 50%;
+      box-shadow: 0 0 10px #10b981;
+      animation: pulse 1.8s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+      }
+      50% {
+        opacity: 0.4;
+        transform: scale(1.25);
+      }
+    }
+
+    h1 {
+      font-size: 28px;
+      font-weight: 700;
+      background: linear-gradient(90deg, #ffffff, #94a3b8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 8px;
+    }
+
+    p.subtitle {
+      color: #94a3b8;
+      font-size: 14px;
+      margin-bottom: 28px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    .item {
+      background: rgba(15,23,42,0.65);
+      border: 1px solid rgba(148,163,184,0.1);
+      border-radius: 12px;
+      padding: 14px 16px;
+    }
+
+    .item.full {
+      grid-column: span 2;
+    }
+
+    .label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #64748b;
+      margin-bottom: 4px;
+    }
+
+    .value {
+      font-size: 15px;
+      font-weight: 600;
+      color: #e2e8f0;
+      font-family: 'Courier New', monospace;
+      overflow-wrap: anywhere;
+    }
+
+    .footer {
+      margin-top: 26px;
+      padding-top: 18px;
+      border-top: 1px solid rgba(148,163,184,0.12);
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      color: #64748b;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="card">
+
+    <div class="badge">
+      <span class="dot"></span>
+      Instance Online
+    </div>
+
+    <h1>AWS EC2 Web Server</h1>
+
+    <p class="subtitle">
+      Provisioned automatically via Terraform &amp; EC2 User Data
+    </p>
+
+    <div class="grid">
+
+      <div class="item">
+        <div class="label">Private IPv4</div>
+        <div class="value">$PRIVATE_IP</div>
+      </div>
+
+      <div class="item">
+        <div class="label">Public IPv4</div>
+        <div class="value">${PUBLIC_IP:-N/A}</div>
+      </div>
+
+      <div class="item">
+        <div class="label">Instance Type</div>
+        <div class="value">$INSTANCE_TYPE</div>
+      </div>
+
+      <div class="item">
+        <div class="label">Availability Zone</div>
+        <div class="value">$AZ</div>
+      </div>
+
+      <div class="item full">
+        <div class="label">Instance ID</div>
+        <div class="value">$INSTANCE_ID</div>
+      </div>
+
+    </div>
+
+    <div class="footer">
+      <span>Apache HTTP Server</span>
+      <span>IMDSv2 Secured</span>
+    </div>
+
+  </div>
+</body>
+</html>
+HTML
+
+# Start Apache and enable on boot
+systemctl enable --now httpd
